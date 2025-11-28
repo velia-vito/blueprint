@@ -1,0 +1,42 @@
+name: Web & Documentation Deploy
+run-name: Build & Deploy for `Web` (App / Documentation)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  web-tasks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+    
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Docs
+        run: |
+          dart doc --output ./build/web/doc
+      
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Doc Artifact(s)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './build/web'
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
