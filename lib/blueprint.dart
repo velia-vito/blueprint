@@ -2,233 +2,153 @@
 ///
 /// In this framework:
 ///
-/// 1. The data layer is represented by [Model], meant primarily for CRUD (Create, Read, Update, Delete) operations on data sources.
+/// 1. The data layer is represented by [Model], meant primarily for CRUD
+///    (Create, Read, Update, Delete) operations on data sources.
 ///
-/// 1. The business-logic layer is represented by [ViewModel], which acts as an intermediary between the Model and the Fragment. A ViewModel manages its own [Model] dependencies — typically received via its constructor — allowing a single ViewModel to operate on **multiple** data sources.
+/// 2. The business-logic layer is represented by [ViewModel], which acts as an
+///    intermediary between the Model(s) and the Fragment. A ViewModel manages
+///    its own [Model] dependencies — received via its constructor — allowing a
+///    single ViewModel to operate on **multiple** data sources with full
+///    compile-time type safety.
 ///
-/// 1. The UI layer is represented by [Fragment], responsible for rendering and user interactions.
+/// 3. The UI layer is represented by [Fragment], responsible for rendering and
+///    user interactions.
 ///
-/// 1. [Connector] is a utility widget that wires a [Fragment] to its [ViewModel]. Models are managed by the ViewModel itself.
+/// 4. [Connector] is a utility widget that wires a [Fragment] to its
+///    [ViewModel]. It calls [Fragment.bind] with the ViewModel, and rebuilds
+///    the Fragment whenever the ViewModel calls [ViewModel.notifyListeners].
+///    Models are managed by the ViewModel itself — the Connector never touches
+///    them.
 ///
-/// ### Example Counter Application
+/// ### How multi-object binding works
 ///
-/// #### [Model]s
+/// Multiple [Model]s are bound **to the ViewModel, not to the Connector**.
+/// The ViewModel declares every Model it needs as a constructor parameter.
+/// The Connector only knows about the ViewModel, so it stays at two generics
+/// and two arguments regardless of how many Models are involved:
 ///
-/// Model code, note how there is only data read and update logic here.
+/// ```
+///  ┌────────────┐      ┌─────────────────┐      ┌────────────┐
+///  │ CounterModel│─────▶│                 │      │            │
+///  └────────────┘      │   AppViewModel  │◀─────│  Fragment   │
+///  ┌────────────┐      │                 │      │            │
+///  │  DateModel  │─────▶│                 │      │            │
+///  └────────────┘      └─────────────────┘      └────────────┘
+///                              ▲
+///                              │
+///                        ┌───────────┐
+///                        │ Connector  │  (wires Fragment ↔ ViewModel)
+///                        └───────────┘
+/// ```
+///
+/// ---
+///
+/// ### Example: Counter + Date Selection App
+///
+/// This example demonstrates two independent [Model]s (a counter and a date
+/// picker) combined in a single [ViewModel] and rendered by one [Fragment].
+///
+/// #### 1. Models — pure data, no UI, no business logic
 ///
 /// ```dart
-/// /// Counter Data.
+/// /// Holds a simple integer counter.
 /// final class CounterModel extends Model {
 ///   int _count = 0;
-///
-///   /// Internal count.
 ///   int get count => _count;
 ///
-///   /// Increment [count] by 1.
-///   void increment() {
-///     _count += 1;
-///   }
+///   void increment() => _count += 1;
+///   void decrement() => _count -= 1;
+/// }
 ///
-///   /// Decrement [count] by 1.
-///   void decrement() {
-///     _count -= 1;
-///   }
+/// /// Holds a selected date.
+/// final class DateModel extends Model {
+///   DateTime _selected = DateTime(2026);
+///   DateTime get selected => _selected;
 ///
-///   /// Double [count].
-///   void double() {
-///     _count *= 2;
-///   }
-///
-///   /// Half [count].
-///   void half() {
-///     _count ~/= 2;
-///   }
+///   void select(DateTime date) => _selected = date;
 /// }
 /// ```
 ///
+/// #### 2. ViewModel — business logic, owns the Models
 ///
-/// #### [ViewModel]s
-///
-/// Next, the ViewModel code — i.e. all the details and controls to connect the UI and the data.
-///
-/// Notice how the ViewModel receives its [Model] through the constructor — this makes it
-/// straightforward to use multiple models, and keeps things easy to test.
+/// The ViewModel receives *both* Models via its constructor. All business rules
+/// live here. It calls [notifyListeners] after every mutation so that the UI
+/// rebuilds.
 ///
 /// ```dart
-/// /// Counter Business Logic.
-/// final class CounterViewModel extends ViewModel {
-///   final CounterModel _counterModel;
+/// final class AppViewModel extends ViewModel {
+///   final CounterModel _counter;
+///   final DateModel _date;
 ///
-///   /// History of operations on counter.
-///   final List<String> actionHistory = <String>[];
+///   AppViewModel({
+///     required CounterModel counterModel,
+///     required DateModel dateModel,
+///   })  : _counter = counterModel,
+///         _date = dateModel;
 ///
-///   /// Creates a [CounterViewModel] operating on the given [CounterModel].
-///   CounterViewModel({required CounterModel counterModel})
-///     : _counterModel = counterModel;
+///   // ── Counter ──────────────────────────────
+///   int get count => _counter.count;
 ///
-///   /// Get count.
-///   int get count => _counterModel.count;
-///
-///   set count(int _) {
-///     throw UnsupportedError('setter for count not supported, property is read-only.');
-///   }
-///
-///   /// Increment count by 1.
 ///   void increment() {
-///     int previousCount = _counterModel.count;
-///
-///     _counterModel.increment();
-///     actionHistory.add('Incremented from $previousCount to ${_counterModel.count}');
-///
+///     _counter.increment();
 ///     notifyListeners();
 ///   }
 ///
-///   /// Decrement count by 1.
 ///   void decrement() {
-///     int previousCount = _counterModel.count;
-///
-///     _counterModel.decrement();
-///     actionHistory.add('Decremented from $previousCount to ${_counterModel.count}');
-///
+///     _counter.decrement();
 ///     notifyListeners();
 ///   }
 ///
-///   /// Double count.
-///   void double() {
-///     int previousCount = _counterModel.count;
+///   // ── Date ─────────────────────────────────
+///   DateTime get selectedDate => _date.selected;
 ///
-///     _counterModel.double();
-///     actionHistory.add('Doubled from $previousCount to ${_counterModel.count}');
-///
+///   void selectDate(DateTime date) {
+///     _date.select(date);
 ///     notifyListeners();
 ///   }
 ///
-///   /// Half count.
-///   void half() {
-///     int previousCount = _counterModel.count;
-///
-///     _counterModel.half();
-///     actionHistory.add('Halved from $previousCount to ${_counterModel.count}');
-///
-///     notifyListeners();
-///   }
+///   // ── Derived / cross-model logic ──────────
+///   String get summary =>
+///       'Count: ${_counter.count}, Date: ${_date.selected.toIso8601String().split("T").first}';
 /// }
 /// ```
 ///
-/// ### [Fragment]s (i.e. A Fragment of the View.)
+/// #### 3. Fragment — the View
 ///
-/// UI fragment for this piece of the interface.
+/// The Fragment receives the *typed* ViewModel in [buildFragment], so
+/// every property and method is available with full autocompletion and
+/// compile-time checking.
 ///
 /// ```dart
-/// /// Counter View
-/// final class CounterFragment extends Fragment<CounterViewModel> {
+/// final class AppFragment extends Fragment<AppViewModel> {
 ///   @override
-///   Widget buildFragment(BuildContext context, CounterViewModel viewModel, Widget? child) {
-///     return Row(
-///       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+///   Widget buildFragment(
+///       BuildContext context, AppViewModel viewModel, Widget? child) {
+///     return Column(
+///       mainAxisSize: MainAxisSize.min,
 ///       children: [
-///         Expanded(
-///           flex: 2,
-///           child: Padding(
-///             padding: const EdgeInsets.all(16.0),
-///             child: Column(
-///               mainAxisSize: MainAxisSize.min,
-///               children: [
-///                 Row(
-///                   mainAxisSize: MainAxisSize.min,
-///                   children: [
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: viewModel.increment,
-///                         child: Text('+1', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: viewModel.double,
-///                         child: Text('×2', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                   ],
-///                 ),
-///                 Padding(
-///                   padding: const EdgeInsets.all(9.0),
-///                   child: Text(
-///                     '${viewModel.count}',
-///                     style: FluentTheme.of(context).typography.titleLarge,
-///                   ),
-///                 ),
-///                 Row(
-///                   mainAxisSize: MainAxisSize.min,
-///                   children: [
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: viewModel.decrement,
-///                         child: Text('-1', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: viewModel.half,
-///                         child: Text('÷2', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                   ],
-///                 ),
-///               ],
-///             ),
-///           ),
-///         ),
-///         Expanded(
-///           child: Padding(
-///             padding: const EdgeInsets.all(8.0),
-///             child: Column(
-///               crossAxisAlignment: CrossAxisAlignment.start,
-///               children: [
-///                 Padding(
-///                   padding: const EdgeInsets.all(8.0),
-///                   child: Text(
-///                     'Action History',
-///                     style: FluentTheme.of(context).typography.title,
-///                   ),
-///                 ),
-///                 Expanded(
-///                   child: ListView.builder(
-///                     itemCount: viewModel.actionHistory.length,
-///                     itemBuilder: (context, index) => IntrinsicWidth(
-///                       child: ListTile(
-///                         title: Text('Action #${index + 1}'),
-///                         subtitle: Text(viewModel.actionHistory[index]),
-///                       ),
-///                     ),
-///                   ),
-///                 ),
-///               ],
-///             ),
-///           ),
-///         ),
+///         Text('${viewModel.count}'),
+///         Text(viewModel.selectedDate.toIso8601String()),
+///         Text(viewModel.summary),
 ///       ],
 ///     );
 ///   }
 /// }
 /// ```
 ///
-/// #### Connector
-///
-/// Using the [Connector] is easy, just insert the below into your widget tree.
+/// #### 4. Connector — wiring it all together
 ///
 /// ```dart
-/// Connector<CounterFragment, CounterViewModel>(
-///       fragment: CounterFragment(),
-///       viewModel: CounterViewModel(
-///         counterModel: CounterModel(),
-///       ),
-///     );
+/// Connector<AppFragment, AppViewModel>(
+///   fragment: AppFragment(),
+///   viewModel: AppViewModel(
+///     counterModel: CounterModel(),
+///     dateModel: DateModel(),
+///   ),
+/// );
 /// ```
+///
+/// That's it — two Models, one ViewModel, one Fragment, one Connector.
 /// {@category framework}
 library;
 

@@ -15,18 +15,19 @@ final class _CounterModel extends Model {
   void decrement() => _count -= 1;
 }
 
-/// A second model to prove multi-object support.
-final class _LogModel extends Model {
-  final List<String> entries = <String>[];
+/// A date-selection model (second, independent data source).
+final class _DateModel extends Model {
+  DateTime _selected = DateTime(2026);
+  DateTime get selected => _selected;
 
-  void log(String message) => entries.add(message);
+  void select(DateTime date) => _selected = date;
 }
 
-/// ViewModel that depends on a *single* model.
-final class _SingleModelVM extends ViewModel {
+/// ViewModel that depends on a *single* model (counter only).
+final class _CounterVM extends ViewModel {
   final _CounterModel _counter;
 
-  _SingleModelVM({required _CounterModel counterModel})
+  _CounterVM({required _CounterModel counterModel})
       : _counter = counterModel;
 
   int get count => _counter.count;
@@ -42,43 +43,60 @@ final class _SingleModelVM extends ViewModel {
   }
 }
 
-/// ViewModel that depends on *multiple* models.
-final class _MultiModelVM extends ViewModel {
+/// ViewModel that depends on *two* models (counter + date).
+///
+/// This is the scenario the user asked about: two separate objects
+/// (counter, date selection) bound to one ViewModel and one Fragment.
+final class _AppViewModel extends ViewModel {
   final _CounterModel _counter;
-  final _LogModel _log;
+  final _DateModel _date;
 
-  _MultiModelVM({
+  _AppViewModel({
     required _CounterModel counterModel,
-    required _LogModel logModel,
+    required _DateModel dateModel,
   })  : _counter = counterModel,
-        _log = logModel;
+        _date = dateModel;
 
+  // counter
   int get count => _counter.count;
-  List<String> get logs => List<String>.unmodifiable(_log.entries);
-
   void increment() {
     _counter.increment();
-    _log.log('incremented to ${_counter.count}');
     notifyListeners();
   }
+
+  void decrement() {
+    _counter.decrement();
+    notifyListeners();
+  }
+
+  // date
+  DateTime get selectedDate => _date.selected;
+  void selectDate(DateTime date) {
+    _date.select(date);
+    notifyListeners();
+  }
+
+  // cross-model derived state
+  String get summary =>
+      'Count: ${_counter.count}, '
+      'Date: ${_date.selected.toIso8601String().split("T").first}';
 }
 
-/// Minimal fragment that renders the count as a [Text] widget.
-final class _CounterFragment extends Fragment<_SingleModelVM> {
+/// Fragment for the single-model counter ViewModel.
+final class _CounterFragment extends Fragment<_CounterVM> {
   @override
   Widget buildFragment(
-      BuildContext context, _SingleModelVM viewModel, Widget? child) {
+      BuildContext context, _CounterVM viewModel, Widget? child) {
     return Text('${viewModel.count}', textDirection: TextDirection.ltr);
   }
 }
 
-/// Fragment for the multi-model view model.
-final class _MultiModelFragment extends Fragment<_MultiModelVM> {
+/// Fragment for the multi-model app ViewModel (counter + date).
+final class _AppFragment extends Fragment<_AppViewModel> {
   @override
   Widget buildFragment(
-      BuildContext context, _MultiModelVM viewModel, Widget? child) {
-    return Text('${viewModel.count} (${viewModel.logs.length} logs)',
-        textDirection: TextDirection.ltr);
+      BuildContext context, _AppViewModel viewModel, Widget? child) {
+    return Text(viewModel.summary, textDirection: TextDirection.ltr);
   }
 }
 
@@ -90,7 +108,7 @@ void main() {
   // ---- Model tests ---------------------------------------------------------
 
   group('Model', () {
-    test('subclass holds and mutates data', () {
+    test('CounterModel holds and mutates data', () {
       final model = _CounterModel();
       expect(model.count, 0);
 
@@ -101,15 +119,24 @@ void main() {
       expect(model.count, 0);
     });
 
+    test('DateModel holds and mutates data', () {
+      final model = _DateModel();
+      expect(model.selected, DateTime(2026));
+
+      final newDate = DateTime(2026, 6, 15);
+      model.select(newDate);
+      expect(model.selected, newDate);
+    });
+
     test('multiple models remain independent', () {
       final counter = _CounterModel();
-      final log = _LogModel();
+      final date = _DateModel();
 
       counter.increment();
-      log.log('hello');
+      date.select(DateTime(2030));
 
       expect(counter.count, 1);
-      expect(log.entries, ['hello']);
+      expect(date.selected, DateTime(2030));
     });
   });
 
@@ -117,13 +144,13 @@ void main() {
 
   group('ViewModel', () {
     test('is a ChangeNotifier', () {
-      final vm = _SingleModelVM(counterModel: _CounterModel());
+      final vm = _CounterVM(counterModel: _CounterModel());
       expect(vm, isA<ChangeNotifier>());
     });
 
     test('single-model ViewModel reads from its model', () {
       final model = _CounterModel();
-      final vm = _SingleModelVM(counterModel: model);
+      final vm = _CounterVM(counterModel: model);
 
       expect(vm.count, 0);
       model.increment();
@@ -131,7 +158,7 @@ void main() {
     });
 
     test('single-model ViewModel notifies listeners on mutation', () {
-      final vm = _SingleModelVM(counterModel: _CounterModel());
+      final vm = _CounterVM(counterModel: _CounterModel());
       int notifyCount = 0;
       vm.addListener(() => notifyCount++);
 
@@ -144,36 +171,57 @@ void main() {
       expect(vm.count, 0);
     });
 
-    test('multi-model ViewModel operates on multiple models', () {
+    test('multi-model ViewModel operates on counter + date', () {
       final counter = _CounterModel();
-      final log = _LogModel();
-      final vm = _MultiModelVM(
-        counterModel: counter,
-        logModel: log,
-      );
+      final date = _DateModel();
+      final vm = _AppViewModel(counterModel: counter, dateModel: date);
 
+      // initial state
       expect(vm.count, 0);
-      expect(vm.logs, isEmpty);
+      expect(vm.selectedDate, DateTime(2026));
+      expect(vm.summary, 'Count: 0, Date: 2026-01-01');
 
+      // mutate counter
       vm.increment();
       expect(vm.count, 1);
-      expect(vm.logs, ['incremented to 1']);
+      expect(vm.summary, 'Count: 1, Date: 2026-01-01');
 
+      // mutate date
+      vm.selectDate(DateTime(2026, 7, 4));
+      expect(vm.selectedDate, DateTime(2026, 7, 4));
+      expect(vm.summary, 'Count: 1, Date: 2026-07-04');
+
+      // both in one summary
       vm.increment();
-      expect(vm.count, 2);
-      expect(vm.logs, ['incremented to 1', 'incremented to 2']);
+      expect(vm.summary, 'Count: 2, Date: 2026-07-04');
     });
 
-    test('multi-model ViewModel notifies listeners', () {
-      final vm = _MultiModelVM(
+    test('multi-model ViewModel notifies listeners for counter changes', () {
+      final vm = _AppViewModel(
         counterModel: _CounterModel(),
-        logModel: _LogModel(),
+        dateModel: _DateModel(),
       );
       int notifyCount = 0;
       vm.addListener(() => notifyCount++);
 
       vm.increment();
       expect(notifyCount, 1);
+
+      vm.decrement();
+      expect(notifyCount, 2);
+    });
+
+    test('multi-model ViewModel notifies listeners for date changes', () {
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
+      );
+      int notifyCount = 0;
+      vm.addListener(() => notifyCount++);
+
+      vm.selectDate(DateTime(2026, 12, 25));
+      expect(notifyCount, 1);
+      expect(vm.selectedDate, DateTime(2026, 12, 25));
     });
   });
 
@@ -181,7 +229,7 @@ void main() {
 
   group('Fragment', () {
     test('bind sets the viewModel and builder delegates correctly', () {
-      final vm = _SingleModelVM(counterModel: _CounterModel());
+      final vm = _CounterVM(counterModel: _CounterModel());
       final fragment = _CounterFragment();
 
       fragment.bind(vm);
@@ -192,20 +240,26 @@ void main() {
         returnsNormally,
       );
     });
+
+    test('Fragment generic preserves ViewModel type', () {
+      final fragment = _CounterFragment();
+      expect(fragment, isA<Fragment<_CounterVM>>());
+
+      final appFragment = _AppFragment();
+      expect(appFragment, isA<Fragment<_AppViewModel>>());
+    });
   });
 
   // ---- Connector (widget) tests --------------------------------------------
 
   group('Connector', () {
-    testWidgets('renders fragment with single-model ViewModel',
+    testWidgets('renders single-model counter Fragment',
         (WidgetTester tester) async {
-      final model = _CounterModel();
-      final vm = _SingleModelVM(counterModel: model);
-      final fragment = _CounterFragment();
+      final vm = _CounterVM(counterModel: _CounterModel());
 
       await tester.pumpWidget(
-        Connector<_CounterFragment, _SingleModelVM>(
-          fragment: fragment,
+        Connector<_CounterFragment, _CounterVM>(
+          fragment: _CounterFragment(),
           viewModel: vm,
         ),
       );
@@ -213,13 +267,12 @@ void main() {
       expect(find.text('0'), findsOneWidget);
     });
 
-    testWidgets('rebuilds when ViewModel notifies listeners',
+    testWidgets('rebuilds when single-model ViewModel notifies',
         (WidgetTester tester) async {
-      final model = _CounterModel();
-      final vm = _SingleModelVM(counterModel: model);
+      final vm = _CounterVM(counterModel: _CounterModel());
 
       await tester.pumpWidget(
-        Connector<_CounterFragment, _SingleModelVM>(
+        Connector<_CounterFragment, _CounterVM>(
           fragment: _CounterFragment(),
           viewModel: vm,
         ),
@@ -229,52 +282,95 @@ void main() {
 
       vm.increment();
       await tester.pump();
-
       expect(find.text('1'), findsOneWidget);
 
       vm.increment();
       vm.increment();
       await tester.pump();
-
       expect(find.text('3'), findsOneWidget);
     });
 
-    testWidgets('works with multi-model ViewModel',
+    testWidgets('renders multi-model (counter + date) Fragment',
         (WidgetTester tester) async {
-      final counter = _CounterModel();
-      final log = _LogModel();
-      final vm = _MultiModelVM(
-        counterModel: counter,
-        logModel: log,
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
       );
 
       await tester.pumpWidget(
-        Connector<_MultiModelFragment, _MultiModelVM>(
-          fragment: _MultiModelFragment(),
+        Connector<_AppFragment, _AppViewModel>(
+          fragment: _AppFragment(),
           viewModel: vm,
         ),
       );
 
-      expect(find.text('0 (0 logs)'), findsOneWidget);
+      expect(find.text('Count: 0, Date: 2026-01-01'), findsOneWidget);
+    });
+
+    testWidgets('rebuilds on counter change in multi-model ViewModel',
+        (WidgetTester tester) async {
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
+      );
+
+      await tester.pumpWidget(
+        Connector<_AppFragment, _AppViewModel>(
+          fragment: _AppFragment(),
+          viewModel: vm,
+        ),
+      );
 
       vm.increment();
       await tester.pump();
-
-      expect(find.text('1 (1 logs)'), findsOneWidget);
-    });
-  });
-
-  // ---- Type-safety compile-time guarantees ---------------------------------
-
-  group('Type safety', () {
-    test('fragment is correctly typed to its ViewModel', () {
-      final fragment = _CounterFragment();
-      expect(fragment, isA<Fragment<_SingleModelVM>>());
+      expect(find.text('Count: 1, Date: 2026-01-01'), findsOneWidget);
     });
 
-    test('multi-model fragment is correctly typed', () {
-      final fragment = _MultiModelFragment();
-      expect(fragment, isA<Fragment<_MultiModelVM>>());
+    testWidgets('rebuilds on date change in multi-model ViewModel',
+        (WidgetTester tester) async {
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
+      );
+
+      await tester.pumpWidget(
+        Connector<_AppFragment, _AppViewModel>(
+          fragment: _AppFragment(),
+          viewModel: vm,
+        ),
+      );
+
+      vm.selectDate(DateTime(2026, 7, 4));
+      await tester.pump();
+      expect(find.text('Count: 0, Date: 2026-07-04'), findsOneWidget);
+    });
+
+    testWidgets('rebuilds on interleaved counter + date changes',
+        (WidgetTester tester) async {
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
+      );
+
+      await tester.pumpWidget(
+        Connector<_AppFragment, _AppViewModel>(
+          fragment: _AppFragment(),
+          viewModel: vm,
+        ),
+      );
+
+      // increment, then change date, then increment again
+      vm.increment();
+      await tester.pump();
+      expect(find.text('Count: 1, Date: 2026-01-01'), findsOneWidget);
+
+      vm.selectDate(DateTime(2026, 12, 25));
+      await tester.pump();
+      expect(find.text('Count: 1, Date: 2026-12-25'), findsOneWidget);
+
+      vm.increment();
+      await tester.pump();
+      expect(find.text('Count: 2, Date: 2026-12-25'), findsOneWidget);
     });
   });
 }
