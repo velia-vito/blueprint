@@ -82,7 +82,43 @@ accepting repositories through the constructor. It also requires a separate
 `bind` step for each mixin, reintroducing the `late final` pattern the
 redesign aims to remove.
 
-### D. Status quo — keep single generic with `bind()`
+### D. Dart Records as a type-safe repository tuple
+
+```dart
+abstract base class Service<Objects extends Record> extends ChangeNotifier {
+  final Objects objects;
+  Service(this.objects);
+}
+
+final class CounterService extends Service<(CounterRepository, LogRepository)> {
+  CounterService(super.objects);
+  CounterRepository get counter => objects.$1;
+  LogRepository get log => objects.$2;
+}
+```
+
+**Rejected because:** While compile-time type-safe, positional Record fields
+(`$1`, `$2`) are cryptic and hinder readability — a developer cannot tell at a
+glance what each field represents. Named constructor parameters
+(`counterRepository:`) are self-documenting. Records for dependency injection
+is also non-idiomatic in Dart/Flutter.
+
+### E. `registerObject<T>()` service-locator pattern
+
+```dart
+abstract base class Service extends ChangeNotifier {
+  final Map<Type, Repository> _objects = {};
+  void registerObject<T extends Repository>(T repo) => _objects[T] = repo;
+  T object<T extends Repository>() => _objects[T] as T;
+}
+```
+
+**Rejected because:** This is a service-locator anti-pattern. It trades
+compile-time type safety for runtime casting (`as T`), provides no compile-time
+guarantee that all required repositories have been registered, and obscures
+the actual dependencies of a Service behind a dynamic map.
+
+### F. Status quo — keep single generic with `bind()`
 
 Keeping `Service<Repo>` and adding a second mechanism for extra repositories.
 
