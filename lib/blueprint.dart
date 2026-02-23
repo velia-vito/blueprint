@@ -116,8 +116,10 @@
 /// #### 3. Fragment — the View
 ///
 /// The Fragment receives the *typed* ViewModel in [buildFragment], so
-/// every property and method is available with full autocompletion and
-/// compile-time checking.
+/// every property and method is available with full IDE autocompletion.
+///
+/// For helper methods, use the [Fragment.viewModel] getter — it returns the
+/// same typed instance, so the IDE autocompletes every method there too.
 ///
 /// ```dart
 /// final class AppFragment extends Fragment<AppViewModel> {
@@ -127,11 +129,16 @@
 ///     return Column(
 ///       mainAxisSize: MainAxisSize.min,
 ///       children: [
-///         Text('${viewModel.count}'),
-///         Text(viewModel.selectedDate.toIso8601String()),
-///         Text(viewModel.summary),
+///         Text('${viewModel.count}'),          // IDE autocompletes .count
+///         _buildDateLine(),                     // helper uses this.viewModel
+///         Text(viewModel.summary),              // IDE autocompletes .summary
 ///       ],
 ///     );
+///   }
+///
+///   /// Helper — viewModel getter is typed as AppViewModel, not base ViewModel.
+///   Widget _buildDateLine() {
+///     return Text('${viewModel.selectedDate}'); // IDE autocompletes .selectedDate
 ///   }
 /// }
 /// ```

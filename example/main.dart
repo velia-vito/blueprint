@@ -105,12 +105,21 @@ final class AppFragment extends Fragment<AppViewModel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Counter: ${viewModel.count}'),
-          Text('Date: ${viewModel.selectedDate.toIso8601String().split("T").first}'),
+          _buildDateLine(), // helper uses this.viewModel with full autocomplete
           const SizedBox(height: 8),
           Text('Summary: ${viewModel.summary}'),
         ],
       ),
     );
+  }
+
+  /// Helper method — accesses the ViewModel via the [viewModel] getter.
+  ///
+  /// The IDE autocompletes `.selectedDate`, `.selectDate()`, `.count`, etc.
+  /// because the getter is typed as `AppViewModel`, not just `ViewModel`.
+  Widget _buildDateLine() {
+    final date = viewModel.selectedDate.toIso8601String().split('T').first;
+    return Text('Date: $date');
   }
 }
 

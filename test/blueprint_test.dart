@@ -100,6 +100,32 @@ final class _AppFragment extends Fragment<_AppViewModel> {
   }
 }
 
+/// Fragment that uses the [viewModel] getter from a helper method to verify
+/// IDE-friendly autocomplete works outside [buildFragment].
+final class _HelperFragment extends Fragment<_AppViewModel> {
+  @override
+  Widget buildFragment(
+      BuildContext context, _AppViewModel viewModel, Widget? child) {
+    return Column(
+      textDirection: TextDirection.ltr,
+      children: [
+        Text('${viewModel.count}', textDirection: TextDirection.ltr),
+        _buildDateWidget(),
+      ],
+    );
+  }
+
+  /// Helper that accesses the typed ViewModel via the protected getter.
+  Widget _buildDateWidget() {
+    // viewModel getter is fully typed as _AppViewModel — IDE autocompletes
+    // .selectedDate, .selectDate(), .count, .increment(), .summary, etc.
+    return Text(
+      viewModel.selectedDate.toIso8601String().split('T').first,
+      textDirection: TextDirection.ltr,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 //  Tests
 // ---------------------------------------------------------------------------
@@ -248,6 +274,22 @@ void main() {
       final appFragment = _AppFragment();
       expect(appFragment, isA<Fragment<_AppViewModel>>());
     });
+
+    test('viewModel getter returns the bound instance with full type info', () {
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
+      );
+      final fragment = _AppFragment();
+      fragment.bind(vm);
+
+      // The getter returns the exact typed ViewModel, not just ViewModel base.
+      // This means IDE autocomplete shows .count, .increment(), .selectedDate, etc.
+      expect(fragment.viewModel, same(vm));
+      expect(fragment.viewModel.count, 0);
+      expect(fragment.viewModel.selectedDate, DateTime(2026));
+      expect(fragment.viewModel.summary, 'Count: 0, Date: 2026-01-01');
+    });
   });
 
   // ---- Connector (widget) tests --------------------------------------------
@@ -371,6 +413,34 @@ void main() {
       vm.increment();
       await tester.pump();
       expect(find.text('Count: 2, Date: 2026-12-25'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Fragment.viewModel getter enables helper methods with IDE autocomplete',
+        (WidgetTester tester) async {
+      final vm = _AppViewModel(
+        counterModel: _CounterModel(),
+        dateModel: _DateModel(),
+      );
+
+      await tester.pumpWidget(
+        Connector<_HelperFragment, _AppViewModel>(
+          fragment: _HelperFragment(),
+          viewModel: vm,
+        ),
+      );
+
+      // _HelperFragment._buildDateWidget() uses `viewModel.selectedDate`
+      // via the protected getter — verifying it works at render time.
+      expect(find.text('0'), findsOneWidget);
+      expect(find.text('2026-01-01'), findsOneWidget);
+
+      vm.increment();
+      vm.selectDate(DateTime(2026, 7, 4));
+      await tester.pump();
+
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2026-07-04'), findsOneWidget);
     });
   });
 }

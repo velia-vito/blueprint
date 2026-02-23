@@ -3,21 +3,42 @@ part of '../blueprint.dart';
 /// A **Fragment** of UI — i.e. the **View** in MVVM.
 ///
 /// The generic [VM] ensures that [buildFragment] receives the correctly-typed
-/// ViewModel, giving you full autocompletion and compile-time checking on every
-/// property and method.
+/// ViewModel, giving you full IDE autocompletion and compile-time checking on
+/// every property and method.
+///
+/// Use the [viewModel] getter from any helper method in your subclass to
+/// access the bound ViewModel with full type information:
 ///
 /// ```dart
 /// final class AppFragment extends Fragment<AppViewModel> {
 ///   @override
 ///   Widget buildFragment(
 ///       BuildContext context, AppViewModel viewModel, Widget? child) {
-///     return Text('${viewModel.count}');
+///     return Column(
+///       children: [
+///         Text('${viewModel.count}'),     // ← IDE autocompletes .count
+///         Text('${viewModel.summary}'),   // ← IDE autocompletes .summary
+///         _buildDateRow(context),          // helper can use this.viewModel
+///       ],
+///     );
+///   }
+///
+///   Widget _buildDateRow(BuildContext context) {
+///     // viewModel is fully typed as AppViewModel here too:
+///     return Text('${viewModel.selectedDate}');
 ///   }
 /// }
 /// ```
 abstract base class Fragment<VM extends ViewModel> {
-  /// The [ViewModel] that drives this Fragment. Set once by [bind].
   late final VM _viewModel;
+
+  /// The bound [ViewModel], fully typed as [VM].
+  ///
+  /// Available after [Connector] calls [bind]. Use this from helper methods
+  /// in your Fragment subclass — the IDE will autocomplete every public
+  /// property and method on [VM].
+  @protected
+  VM get viewModel => _viewModel;
 
   /// Bind a [ViewModel] to this Fragment.
   ///
