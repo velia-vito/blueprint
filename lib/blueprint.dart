@@ -2,236 +2,167 @@
 ///
 /// In this framework:
 ///
-/// 1. Model is represented by [Repository], meant primarily for CRUD (Create, Read, Update, Delete) operations on data sources.
+/// 1. The data layer is represented by [Model], meant primarily for CRUD
+///    (Create, Read, Update, Delete) operations on data sources.
 ///
-/// 1. The ViewModel is represented by [Service], which contains business logic and acts as an intermediary between the Repository and the Fragment.
+/// 2. The business-logic layer is represented by [ViewModel], which acts as an
+///    intermediary between the Model(s) and the Fragment. A ViewModel manages
+///    its own [Model] dependencies — received via its constructor — allowing a
+///    single ViewModel to operate on **multiple** data sources with full
+///    compile-time type safety.
 ///
-/// 1. The View is represented by [Fragment], responsible for the UI and user interactions.
+/// 3. The UI layer is represented by [Fragment], responsible for rendering and
+///    user interactions.
 ///
-/// 1. [UtilContainer] is a utility class that simplifies the *hooking up* of Repositories, Services, and Fragments.
+/// 4. [Connector] is a utility widget that wires a [Fragment] to its
+///    [ViewModel]. It calls [Fragment.bind] with the ViewModel, and rebuilds
+///    the Fragment whenever the ViewModel calls [ViewModel.notifyListeners].
+///    Models are managed by the ViewModel itself — the Connector never touches
+///    them.
 ///
-/// ### Example Counter Application
+/// ### How multi-object binding works
 ///
-/// #### [Repository]s
+/// Multiple [Model]s are bound **to the ViewModel, not to the Connector**.
+/// The ViewModel declares every Model it needs as a constructor parameter.
+/// The Connector only knows about the ViewModel, so it stays at two generics
+/// and two arguments regardless of how many Models are involved:
 ///
-/// Repository code, note how there is only data read and update logic here.
+/// ```
+///  ┌────────────┐      ┌─────────────────┐      ┌────────────┐
+///  │ CounterModel│─────▶│                 │      │            │
+///  └────────────┘      │   AppViewModel  │◀─────│  Fragment   │
+///  ┌────────────┐      │                 │      │            │
+///  │  DateModel  │─────▶│                 │      │            │
+///  └────────────┘      └─────────────────┘      └────────────┘
+///                              ▲
+///                              │
+///                        ┌───────────┐
+///                        │ Connector  │  (wires Fragment ↔ ViewModel)
+///                        └───────────┘
+/// ```
+///
+/// ---
+///
+/// ### Example: Counter + Date Selection App
+///
+/// This example demonstrates two independent [Model]s (a counter and a date
+/// picker) combined in a single [ViewModel] and rendered by one [Fragment].
+///
+/// #### 1. Models — pure data, no UI, no business logic
 ///
 /// ```dart
-/// Counter Data.
-/// final class CounterRepository extends Repository {
+/// /// Holds a simple integer counter.
+/// final class CounterModel extends Model {
 ///   int _count = 0;
-///
-///   /// Internal count.
 ///   int get count => _count;
 ///
-///   /// Increment [count] by 1.
-///   void increment() {
-///     _count += 1;
-///   }
+///   void increment() => _count += 1;
+///   void decrement() => _count -= 1;
+/// }
 ///
-///   /// Decrement [count] by 1.
-///   void decrement() {
-///     _count -= 1;
-///   }
+/// /// Holds a selected date.
+/// final class DateModel extends Model {
+///   DateTime _selected = DateTime(2026);
+///   DateTime get selected => _selected;
 ///
-///   /// Double [count].
-///   void double() {
-///     _count *= 2;
-///   }
-///
-///   /// Half [count].
-///   void half() {
-///     _count ~/= 2;
-///   }
+///   void select(DateTime date) => _selected = date;
 /// }
 /// ```
 ///
+/// #### 2. ViewModel — business logic, owns the Models
 ///
-/// #### [Service]s
-///
-/// Next, the Service code — i.e. all the details and controls to connect the UI and the data. Even though most of this
-/// is just data pass through from Repository, keep in mind that this is not always true, e.g. the "action history"
-/// provided by `CounterService` class.
+/// The ViewModel receives *both* Models via its constructor. All business rules
+/// live here. It calls [notifyListeners] after every mutation so that the UI
+/// rebuilds.
 ///
 /// ```dart
-/// /// Counter Buisness Logic.
-/// final class CounterService extends Service<CounterRepository> {
-///   /// History of operations on counter.
-///   final List<String> actionHistory = <String>[];
+/// final class AppViewModel extends ViewModel {
+///   final CounterModel _counter;
+///   final DateModel _date;
 ///
-///   /// Get count.
-///   int get count => repository.count;
+///   AppViewModel({
+///     required CounterModel counterModel,
+///     required DateModel dateModel,
+///   })  : _counter = counterModel,
+///         _date = dateModel;
 ///
-///   set count(int _) {
-///     throw UnsupportedError('setter for count not supported, property is read-only.');
-///   }
+///   // ── Counter ──────────────────────────────
+///   int get count => _counter.count;
 ///
-///   /// Increment count by 1.
 ///   void increment() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
-///
-///     repo.increment();
-///     actionHistory.add('Incremented from $previousCount to ${repo.count}');
-///
+///     _counter.increment();
 ///     notifyListeners();
 ///   }
 ///
-///   /// Decrement count by 1.
 ///   void decrement() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
-///
-///     repo.decrement();
-///     actionHistory.add('Decremented from $previousCount to ${repo.count}');
-///
+///     _counter.decrement();
 ///     notifyListeners();
 ///   }
 ///
-///   /// Double count.
-///   void double() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
+///   // ── Date ─────────────────────────────────
+///   DateTime get selectedDate => _date.selected;
 ///
-///     repo.double();
-///     actionHistory.add('Doubled from $previousCount to ${repo.count}');
-///
+///   void selectDate(DateTime date) {
+///     _date.select(date);
 ///     notifyListeners();
 ///   }
 ///
-///   /// Half count.
-///   void half() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
-///
-///     repo.half();
-///     actionHistory.add('Halved from $previousCount to ${repo.count}');
-///
-///     notifyListeners();
-///   }
+///   // ── Derived / cross-model logic ──────────
+///   String get summary =>
+///       'Count: ${_counter.count}, Date: ${_date.selected.toIso8601String().split("T").first}';
 /// }
 /// ```
 ///
-/// ### [Fragment]s (i.e. A Fragment of view.)
+/// #### 3. Fragment — the View
 ///
-/// UI view for this 'fragment of UI.'
+/// The Fragment receives the *typed* ViewModel in [buildFragment], so
+/// every property and method is available with full IDE autocompletion.
+///
+/// For helper methods, use the [Fragment.viewModel] getter — it returns the
+/// same typed instance, so the IDE autocompletes every method there too.
 ///
 /// ```dart
-/// /// Counter View
-/// final class CounterFragment extends Fragment<CounterService> {
+/// final class AppFragment extends Fragment<AppViewModel> {
 ///   @override
-///   Widget buildFragment(BuildContext context, CounterService service, Widget? child) {
-///     return Row(
-///       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+///   Widget buildFragment(
+///       BuildContext context, AppViewModel viewModel, Widget? child) {
+///     return Column(
+///       mainAxisSize: MainAxisSize.min,
 ///       children: [
-///         Expanded(
-///           flex: 2,
-///           child: Padding(
-///             padding: const EdgeInsets.all(16.0),
-///             child: Column(
-///               mainAxisSize: MainAxisSize.min,
-///               children: [
-///                 Row(
-///                   mainAxisSize: MainAxisSize.min,
-///                   children: [
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: service.increment,
-///                         child: Text('+1', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: service.double,
-///                         child: Text('×2', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                   ],
-///                 ),
-///                 Padding(
-///                   padding: const EdgeInsets.all(9.0),
-///                   child: Text(
-///                     '${service.count}',
-///                     style: FluentTheme.of(context).typography.titleLarge,
-///                   ),
-///                 ),
-///                 Row(
-///                   mainAxisSize: MainAxisSize.min,
-///                   children: [
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: service.decrement,
-///                         child: Text('-1', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                     Padding(
-///                       padding: const EdgeInsets.all(8.0),
-///                       child: Button(
-///                         onPressed: service.half,
-///                         child: Text('÷2', style: FluentTheme.of(context).typography.subtitle),
-///                       ),
-///                     ),
-///                   ],
-///                 ),
-///               ],
-///             ),
-///           ),
-///         ),
-///         Expanded(
-///           child: Padding(
-///             padding: const EdgeInsets.all(8.0),
-///             child: Column(
-///               crossAxisAlignment: CrossAxisAlignment.start,
-///               children: [
-///                 Padding(
-///                   padding: const EdgeInsets.all(8.0),
-///                   child: Text(
-///                     'Action History',
-///                     style: FluentTheme.of(context).typography.title,
-///                   ),
-///                 ),
-///                 Expanded(
-///                   child: ListView.builder(
-///                     itemCount: service.actionHistory.length,
-///                     itemBuilder: (context, index) => IntrinsicWidth(
-///                       child: ListTile(
-///                         title: Text('Action #${index + 1}'),
-///                         subtitle: Text(service.actionHistory[index]),
-///                       ),
-///                     ),
-///                   ),
-///                 ),
-///               ],
-///             ),
-///           ),
-///         ),
+///         Text('${viewModel.count}'),          // IDE autocompletes .count
+///         _buildDateLine(),                     // helper uses this.viewModel
+///         Text(viewModel.summary),              // IDE autocompletes .summary
 ///       ],
 ///     );
 ///   }
+///
+///   /// Helper — viewModel getter is typed as AppViewModel, not base ViewModel.
+///   Widget _buildDateLine() {
+///     return Text('${viewModel.selectedDate}'); // IDE autocompletes .selectedDate
+///   }
 /// }
 /// ```
 ///
-/// #### UtilContainer
-///
-/// Using the [UtilContainer] is easy, just insert the below into your tech tree.
+/// #### 4. Connector — wiring it all together
 ///
 /// ```dart
-/// UtilContainer<CounterFragment, CounterService, CounterRepository>(
-///       fragment: CounterFragment(),
-///       service: CounterService(),
-///       repository: CounterRepository(),
-///     );
+/// Connector<AppFragment, AppViewModel>(
+///   fragment: AppFragment(),
+///   viewModel: AppViewModel(
+///     counterModel: CounterModel(),
+///     dateModel: DateModel(),
+///   ),
+/// );
 /// ```
+///
+/// That's it — two Models, one ViewModel, one Fragment, one Connector.
 /// {@category framework}
 library;
 
 import 'package:flutter/widgets.dart';
 
-part 'blueprint/container.dart';
+part 'blueprint/connector.dart';
 
-part 'blueprint/repository.dart';
-part 'blueprint/service.dart';
+part 'blueprint/model.dart';
+part 'blueprint/view_model.dart';
 part 'blueprint/fragment.dart';
