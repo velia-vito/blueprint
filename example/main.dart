@@ -1,15 +1,19 @@
-// ignore_for_file: avoid_print
-/// Example: Counter + Date Selection app using the blueprint package.
+/// Example: Interactive Counter + Date Selection app using blueprint.
 ///
-/// Two independent Models (CounterModel, DateModel) are combined in a single
-/// ViewModel (AppViewModel) and rendered by one Fragment (AppFragment).
+/// Two independent Models ([CounterModel], [DateModel]) are combined in a
+/// single ViewModel ([AppViewModel]) and rendered by one Fragment
+/// ([AppFragment]). The Fragment uses Material Design widgets so you can
+/// actually tap buttons and pick dates.
 ///
-/// This file is a self-contained demonstration. Run it with:
-///   flutter run example/main.dart
+/// Run with:
+///
+/// ```sh
+/// cd example && flutter run
+/// ```
 library;
 
 import 'package:blueprint/blueprint.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 // ---------------------------------------------------------------------------
 //  Models — pure data, no UI, no business logic
@@ -90,36 +94,118 @@ final class AppViewModel extends ViewModel {
 }
 
 // ---------------------------------------------------------------------------
-//  Fragment — the View
+//  Fragment — the View (Material Design)
 // ---------------------------------------------------------------------------
 
-/// Renders counter, date, and a combined summary.
+/// Interactive UI with tappable + / − buttons and a date picker.
 final class AppFragment extends Fragment<AppViewModel> {
   @override
   Widget buildFragment(
       BuildContext context, AppViewModel viewModel, Widget? child) {
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Counter: ${viewModel.count}'),
-          _buildDateLine(), // helper uses this.viewModel with full autocomplete
-          const SizedBox(height: 8),
-          Text('Summary: ${viewModel.summary}'),
-        ],
+    return MaterialApp(
+      title: 'Blueprint Demo',
+      theme: ThemeData(
+        colorSchemeSeed: Colors.indigo,
+        useMaterial3: true,
+      ),
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Blueprint Demo')),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Counter section ──────────────────────────────
+              _buildCounterCard(),
+              const SizedBox(height: 16),
+
+              // ── Date section ─────────────────────────────────
+              _buildDateCard(context),
+              const SizedBox(height: 24),
+
+              // ── Cross-model summary ──────────────────────────
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.summarize),
+                  title: const Text('Summary'),
+                  subtitle: Text(viewModel.summary),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  /// Helper method — accesses the ViewModel via the [viewModel] getter.
+  // ── Helper: Counter card ────────────────────────────────────────────────
+  /// Builds the counter display with +/− buttons.
   ///
-  /// The IDE autocompletes `.selectedDate`, `.selectDate()`, `.count`, etc.
-  /// because the getter is typed as `AppViewModel`, not just `ViewModel`.
-  Widget _buildDateLine() {
-    final date = viewModel.selectedDate.toIso8601String().split('T').first;
-    return Text('Date: $date');
+  /// `viewModel` here is typed as `AppViewModel` via the getter, so
+  /// `.count`, `.increment()`, `.decrement()` all autocomplete in the IDE.
+  Widget _buildCounterCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.tag, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              '${viewModel.count}',
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            IconButton.filled(
+              icon: const Icon(Icons.remove),
+              onPressed: viewModel.decrement,
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              icon: const Icon(Icons.add),
+              onPressed: viewModel.increment,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Helper: Date card ───────────────────────────────────────────────────
+  /// Builds the date display with a "Pick Date" button.
+  ///
+  /// `viewModel` here is typed as `AppViewModel` via the getter, so
+  /// `.selectedDate`, `.selectDate()` autocomplete in the IDE.
+  Widget _buildDateCard(BuildContext context) {
+    final dateStr =
+        viewModel.selectedDate.toIso8601String().split('T').first;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, size: 28),
+            const SizedBox(width: 12),
+            Text(dateStr, style: const TextStyle(fontSize: 20)),
+            const Spacer(),
+            FilledButton.icon(
+              icon: const Icon(Icons.edit_calendar),
+              label: const Text('Pick Date'),
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: viewModel.selectedDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (picked != null) viewModel.selectDate(picked);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
