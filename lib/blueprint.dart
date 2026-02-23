@@ -4,11 +4,11 @@
 ///
 /// 1. Model is represented by [Repository], meant primarily for CRUD (Create, Read, Update, Delete) operations on data sources.
 ///
-/// 1. The ViewModel is represented by [Service], which contains business logic and acts as an intermediary between the Repository and the Fragment.
+/// 1. The ViewModel is represented by [Service], which contains business logic and acts as an intermediary between the Repository and the Fragment. A Service manages its own [Repository] dependencies — typically received via its constructor — allowing a single Service to operate on **multiple** data sources.
 ///
 /// 1. The View is represented by [Fragment], responsible for the UI and user interactions.
 ///
-/// 1. [UtilContainer] is a utility class that simplifies the *hooking up* of Repositories, Services, and Fragments.
+/// 1. [UtilContainer] is a utility class that simplifies the *hooking up* of Services and Fragments. Repositories are managed by the Service itself.
 ///
 /// ### Example Counter Application
 ///
@@ -17,7 +17,7 @@
 /// Repository code, note how there is only data read and update logic here.
 ///
 /// ```dart
-/// Counter Data.
+/// /// Counter Data.
 /// final class CounterRepository extends Repository {
 ///   int _count = 0;
 ///
@@ -49,18 +49,25 @@
 ///
 /// #### [Service]s
 ///
-/// Next, the Service code — i.e. all the details and controls to connect the UI and the data. Even though most of this
-/// is just data pass through from Repository, keep in mind that this is not always true, e.g. the "action history"
-/// provided by `CounterService` class.
+/// Next, the Service code — i.e. all the details and controls to connect the UI and the data.
+///
+/// Notice how the Service receives its [Repository] through the constructor — this makes it
+/// straightforward to use multiple repositories, and keeps things easy to test.
 ///
 /// ```dart
-/// /// Counter Buisness Logic.
-/// final class CounterService extends Service<CounterRepository> {
+/// /// Counter Business Logic.
+/// final class CounterService extends Service {
+///   final CounterRepository _counterRepo;
+///
 ///   /// History of operations on counter.
 ///   final List<String> actionHistory = <String>[];
 ///
+///   /// Creates a [CounterService] operating on the given [CounterRepository].
+///   CounterService({required CounterRepository counterRepository})
+///     : _counterRepo = counterRepository;
+///
 ///   /// Get count.
-///   int get count => repository.count;
+///   int get count => _counterRepo.count;
 ///
 ///   set count(int _) {
 ///     throw UnsupportedError('setter for count not supported, property is read-only.');
@@ -68,44 +75,40 @@
 ///
 ///   /// Increment count by 1.
 ///   void increment() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
+///     int previousCount = _counterRepo.count;
 ///
-///     repo.increment();
-///     actionHistory.add('Incremented from $previousCount to ${repo.count}');
+///     _counterRepo.increment();
+///     actionHistory.add('Incremented from $previousCount to ${_counterRepo.count}');
 ///
 ///     notifyListeners();
 ///   }
 ///
 ///   /// Decrement count by 1.
 ///   void decrement() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
+///     int previousCount = _counterRepo.count;
 ///
-///     repo.decrement();
-///     actionHistory.add('Decremented from $previousCount to ${repo.count}');
+///     _counterRepo.decrement();
+///     actionHistory.add('Decremented from $previousCount to ${_counterRepo.count}');
 ///
 ///     notifyListeners();
 ///   }
 ///
 ///   /// Double count.
 ///   void double() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
+///     int previousCount = _counterRepo.count;
 ///
-///     repo.double();
-///     actionHistory.add('Doubled from $previousCount to ${repo.count}');
+///     _counterRepo.double();
+///     actionHistory.add('Doubled from $previousCount to ${_counterRepo.count}');
 ///
 ///     notifyListeners();
 ///   }
 ///
 ///   /// Half count.
 ///   void half() {
-///     CounterRepository repo = repository;
-///     int previousCount = repo.count;
+///     int previousCount = _counterRepo.count;
 ///
-///     repo.half();
-///     actionHistory.add('Halved from $previousCount to ${repo.count}');
+///     _counterRepo.half();
+///     actionHistory.add('Halved from $previousCount to ${_counterRepo.count}');
 ///
 ///     notifyListeners();
 ///   }
@@ -216,13 +219,14 @@
 ///
 /// #### UtilContainer
 ///
-/// Using the [UtilContainer] is easy, just insert the below into your tech tree.
+/// Using the [UtilContainer] is easy, just insert the below into your widget tree.
 ///
 /// ```dart
-/// UtilContainer<CounterFragment, CounterService, CounterRepository>(
+/// UtilContainer<CounterFragment, CounterService>(
 ///       fragment: CounterFragment(),
-///       service: CounterService(),
-///       repository: CounterRepository(),
+///       service: CounterService(
+///         counterRepository: CounterRepository(),
+///       ),
 ///     );
 /// ```
 /// {@category framework}

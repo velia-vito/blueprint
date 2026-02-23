@@ -1,8 +1,8 @@
 part of '../blueprint.dart';
 
-/// A 'Fragment' of UI.
-abstract base class Fragment<Serv extends Service<Repository>> {
-  /// [Service] that drives the Buisness Logic of this UI Fragment.
+/// A 'Fragment' of UI — i.e. the View.
+abstract base class Fragment<Serv extends Service> {
+  /// [Service] that drives the Business Logic of this UI Fragment.
   late final Serv _service;
 
   /// Bind [Service] `S` to this Fragment.
@@ -11,6 +11,6 @@ abstract base class Fragment<Serv extends Service<Repository>> {
   /// Build a 'Fragment' of the Widget tree, using the provided [Service] `S`.
   Widget buildFragment(BuildContext context, Serv service, Widget? child);
 
-  /// A builder function to be used with [ListenableBuilder] within [Container.build].
+  /// A builder function to be used with [ListenableBuilder] within [UtilContainer.build].
   Widget builder(BuildContext context, Widget? child) => buildFragment(context, _service, child);
 }
