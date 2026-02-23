@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 //  Test doubles
 // ---------------------------------------------------------------------------
 
-/// A simple counter repository (single Object).
-final class _CounterRepository extends Repository {
+/// A simple counter model (single data source).
+final class _CounterModel extends Model {
   int _count = 0;
   int get count => _count;
 
@@ -15,19 +15,19 @@ final class _CounterRepository extends Repository {
   void decrement() => _count -= 1;
 }
 
-/// A second repository to prove multi-object support.
-final class _LogRepository extends Repository {
+/// A second model to prove multi-object support.
+final class _LogModel extends Model {
   final List<String> entries = <String>[];
 
   void log(String message) => entries.add(message);
 }
 
-/// Service that depends on a *single* repository.
-final class _SingleRepoService extends Service {
-  final _CounterRepository _counter;
+/// ViewModel that depends on a *single* model.
+final class _SingleModelVM extends ViewModel {
+  final _CounterModel _counter;
 
-  _SingleRepoService({required _CounterRepository counterRepository})
-      : _counter = counterRepository;
+  _SingleModelVM({required _CounterModel counterModel})
+      : _counter = counterModel;
 
   int get count => _counter.count;
 
@@ -42,16 +42,16 @@ final class _SingleRepoService extends Service {
   }
 }
 
-/// Service that depends on *multiple* repositories.
-final class _MultiRepoService extends Service {
-  final _CounterRepository _counter;
-  final _LogRepository _log;
+/// ViewModel that depends on *multiple* models.
+final class _MultiModelVM extends ViewModel {
+  final _CounterModel _counter;
+  final _LogModel _log;
 
-  _MultiRepoService({
-    required _CounterRepository counterRepository,
-    required _LogRepository logRepository,
-  })  : _counter = counterRepository,
-        _log = logRepository;
+  _MultiModelVM({
+    required _CounterModel counterModel,
+    required _LogModel logModel,
+  })  : _counter = counterModel,
+        _log = logModel;
 
   int get count => _counter.count;
   List<String> get logs => List<String>.unmodifiable(_log.entries);
@@ -64,20 +64,20 @@ final class _MultiRepoService extends Service {
 }
 
 /// Minimal fragment that renders the count as a [Text] widget.
-final class _CounterFragment extends Fragment<_SingleRepoService> {
+final class _CounterFragment extends Fragment<_SingleModelVM> {
   @override
   Widget buildFragment(
-      BuildContext context, _SingleRepoService service, Widget? child) {
-    return Text('${service.count}', textDirection: TextDirection.ltr);
+      BuildContext context, _SingleModelVM viewModel, Widget? child) {
+    return Text('${viewModel.count}', textDirection: TextDirection.ltr);
   }
 }
 
-/// Fragment for the multi-repo service.
-final class _MultiRepoFragment extends Fragment<_MultiRepoService> {
+/// Fragment for the multi-model view model.
+final class _MultiModelFragment extends Fragment<_MultiModelVM> {
   @override
   Widget buildFragment(
-      BuildContext context, _MultiRepoService service, Widget? child) {
-    return Text('${service.count} (${service.logs.length} logs)',
+      BuildContext context, _MultiModelVM viewModel, Widget? child) {
+    return Text('${viewModel.count} (${viewModel.logs.length} logs)',
         textDirection: TextDirection.ltr);
   }
 }
@@ -87,23 +87,23 @@ final class _MultiRepoFragment extends Fragment<_MultiRepoService> {
 // ---------------------------------------------------------------------------
 
 void main() {
-  // ---- Repository tests ---------------------------------------------------
+  // ---- Model tests ---------------------------------------------------------
 
-  group('Repository', () {
+  group('Model', () {
     test('subclass holds and mutates data', () {
-      final repo = _CounterRepository();
-      expect(repo.count, 0);
+      final model = _CounterModel();
+      expect(model.count, 0);
 
-      repo.increment();
-      expect(repo.count, 1);
+      model.increment();
+      expect(model.count, 1);
 
-      repo.decrement();
-      expect(repo.count, 0);
+      model.decrement();
+      expect(model.count, 0);
     });
 
-    test('multiple repositories remain independent', () {
-      final counter = _CounterRepository();
-      final log = _LogRepository();
+    test('multiple models remain independent', () {
+      final counter = _CounterModel();
+      final log = _LogModel();
 
       counter.increment();
       log.log('hello');
@@ -113,81 +113,78 @@ void main() {
     });
   });
 
-  // ---- Service tests ------------------------------------------------------
+  // ---- ViewModel tests -----------------------------------------------------
 
-  group('Service', () {
+  group('ViewModel', () {
     test('is a ChangeNotifier', () {
-      final service =
-          _SingleRepoService(counterRepository: _CounterRepository());
-      expect(service, isA<ChangeNotifier>());
+      final vm = _SingleModelVM(counterModel: _CounterModel());
+      expect(vm, isA<ChangeNotifier>());
     });
 
-    test('single-repo service reads from its repository', () {
-      final repo = _CounterRepository();
-      final service = _SingleRepoService(counterRepository: repo);
+    test('single-model ViewModel reads from its model', () {
+      final model = _CounterModel();
+      final vm = _SingleModelVM(counterModel: model);
 
-      expect(service.count, 0);
-      repo.increment();
-      expect(service.count, 1);
+      expect(vm.count, 0);
+      model.increment();
+      expect(vm.count, 1);
     });
 
-    test('single-repo service notifies listeners on mutation', () {
-      final service =
-          _SingleRepoService(counterRepository: _CounterRepository());
+    test('single-model ViewModel notifies listeners on mutation', () {
+      final vm = _SingleModelVM(counterModel: _CounterModel());
       int notifyCount = 0;
-      service.addListener(() => notifyCount++);
+      vm.addListener(() => notifyCount++);
 
-      service.increment();
+      vm.increment();
       expect(notifyCount, 1);
-      expect(service.count, 1);
+      expect(vm.count, 1);
 
-      service.decrement();
+      vm.decrement();
       expect(notifyCount, 2);
-      expect(service.count, 0);
+      expect(vm.count, 0);
     });
 
-    test('multi-repo service operates on multiple repositories', () {
-      final counter = _CounterRepository();
-      final log = _LogRepository();
-      final service = _MultiRepoService(
-        counterRepository: counter,
-        logRepository: log,
+    test('multi-model ViewModel operates on multiple models', () {
+      final counter = _CounterModel();
+      final log = _LogModel();
+      final vm = _MultiModelVM(
+        counterModel: counter,
+        logModel: log,
       );
 
-      expect(service.count, 0);
-      expect(service.logs, isEmpty);
+      expect(vm.count, 0);
+      expect(vm.logs, isEmpty);
 
-      service.increment();
-      expect(service.count, 1);
-      expect(service.logs, ['incremented to 1']);
+      vm.increment();
+      expect(vm.count, 1);
+      expect(vm.logs, ['incremented to 1']);
 
-      service.increment();
-      expect(service.count, 2);
-      expect(service.logs, ['incremented to 1', 'incremented to 2']);
+      vm.increment();
+      expect(vm.count, 2);
+      expect(vm.logs, ['incremented to 1', 'incremented to 2']);
     });
 
-    test('multi-repo service notifies listeners', () {
-      final service = _MultiRepoService(
-        counterRepository: _CounterRepository(),
-        logRepository: _LogRepository(),
+    test('multi-model ViewModel notifies listeners', () {
+      final vm = _MultiModelVM(
+        counterModel: _CounterModel(),
+        logModel: _LogModel(),
       );
       int notifyCount = 0;
-      service.addListener(() => notifyCount++);
+      vm.addListener(() => notifyCount++);
 
-      service.increment();
+      vm.increment();
       expect(notifyCount, 1);
     });
   });
 
-  // ---- Fragment tests -----------------------------------------------------
+  // ---- Fragment tests ------------------------------------------------------
 
   group('Fragment', () {
-    test('bind sets the service and builder delegates correctly', () {
-      final service =
-          _SingleRepoService(counterRepository: _CounterRepository());
+    test('bind sets the viewModel and builder delegates correctly', () {
+      final vm = _SingleModelVM(counterModel: _CounterModel());
       final fragment = _CounterFragment();
 
-      fragment.bind(service);
+      fragment.bind(vm);
 
       // builder should not throw after binding
       expect(
@@ -197,70 +194,70 @@ void main() {
     });
   });
 
-  // ---- UtilContainer (widget) tests ----------------------------------------
+  // ---- Connector (widget) tests --------------------------------------------
 
-  group('UtilContainer', () {
-    testWidgets('renders fragment with single-repo service',
+  group('Connector', () {
+    testWidgets('renders fragment with single-model ViewModel',
         (WidgetTester tester) async {
-      final repo = _CounterRepository();
-      final service = _SingleRepoService(counterRepository: repo);
+      final model = _CounterModel();
+      final vm = _SingleModelVM(counterModel: model);
       final fragment = _CounterFragment();
 
       await tester.pumpWidget(
-        UtilContainer<_CounterFragment, _SingleRepoService>(
+        Connector<_CounterFragment, _SingleModelVM>(
           fragment: fragment,
-          service: service,
+          viewModel: vm,
         ),
       );
 
       expect(find.text('0'), findsOneWidget);
     });
 
-    testWidgets('rebuilds when service notifies listeners',
+    testWidgets('rebuilds when ViewModel notifies listeners',
         (WidgetTester tester) async {
-      final repo = _CounterRepository();
-      final service = _SingleRepoService(counterRepository: repo);
+      final model = _CounterModel();
+      final vm = _SingleModelVM(counterModel: model);
 
       await tester.pumpWidget(
-        UtilContainer<_CounterFragment, _SingleRepoService>(
+        Connector<_CounterFragment, _SingleModelVM>(
           fragment: _CounterFragment(),
-          service: service,
+          viewModel: vm,
         ),
       );
 
       expect(find.text('0'), findsOneWidget);
 
-      service.increment();
+      vm.increment();
       await tester.pump();
 
       expect(find.text('1'), findsOneWidget);
 
-      service.increment();
-      service.increment();
+      vm.increment();
+      vm.increment();
       await tester.pump();
 
       expect(find.text('3'), findsOneWidget);
     });
 
-    testWidgets('works with multi-repo service',
+    testWidgets('works with multi-model ViewModel',
         (WidgetTester tester) async {
-      final counter = _CounterRepository();
-      final log = _LogRepository();
-      final service = _MultiRepoService(
-        counterRepository: counter,
-        logRepository: log,
+      final counter = _CounterModel();
+      final log = _LogModel();
+      final vm = _MultiModelVM(
+        counterModel: counter,
+        logModel: log,
       );
 
       await tester.pumpWidget(
-        UtilContainer<_MultiRepoFragment, _MultiRepoService>(
-          fragment: _MultiRepoFragment(),
-          service: service,
+        Connector<_MultiModelFragment, _MultiModelVM>(
+          fragment: _MultiModelFragment(),
+          viewModel: vm,
         ),
       );
 
       expect(find.text('0 (0 logs)'), findsOneWidget);
 
-      service.increment();
+      vm.increment();
       await tester.pump();
 
       expect(find.text('1 (1 logs)'), findsOneWidget);
@@ -270,14 +267,14 @@ void main() {
   // ---- Type-safety compile-time guarantees ---------------------------------
 
   group('Type safety', () {
-    test('fragment is correctly typed to its service', () {
+    test('fragment is correctly typed to its ViewModel', () {
       final fragment = _CounterFragment();
-      expect(fragment, isA<Fragment<_SingleRepoService>>());
+      expect(fragment, isA<Fragment<_SingleModelVM>>());
     });
 
-    test('multi-repo fragment is correctly typed', () {
-      final fragment = _MultiRepoFragment();
-      expect(fragment, isA<Fragment<_MultiRepoService>>());
+    test('multi-model fragment is correctly typed', () {
+      final fragment = _MultiModelFragment();
+      expect(fragment, isA<Fragment<_MultiModelVM>>());
     });
   });
 }

@@ -2,23 +2,23 @@
 ///
 /// In this framework:
 ///
-/// 1. Model is represented by [Repository], meant primarily for CRUD (Create, Read, Update, Delete) operations on data sources.
+/// 1. The data layer is represented by [Model], meant primarily for CRUD (Create, Read, Update, Delete) operations on data sources.
 ///
-/// 1. The ViewModel is represented by [Service], which contains business logic and acts as an intermediary between the Repository and the Fragment. A Service manages its own [Repository] dependencies — typically received via its constructor — allowing a single Service to operate on **multiple** data sources.
+/// 1. The business-logic layer is represented by [ViewModel], which acts as an intermediary between the Model and the Fragment. A ViewModel manages its own [Model] dependencies — typically received via its constructor — allowing a single ViewModel to operate on **multiple** data sources.
 ///
-/// 1. The View is represented by [Fragment], responsible for the UI and user interactions.
+/// 1. The UI layer is represented by [Fragment], responsible for rendering and user interactions.
 ///
-/// 1. [UtilContainer] is a utility class that simplifies the *hooking up* of Services and Fragments. Repositories are managed by the Service itself.
+/// 1. [Connector] is a utility widget that wires a [Fragment] to its [ViewModel]. Models are managed by the ViewModel itself.
 ///
 /// ### Example Counter Application
 ///
-/// #### [Repository]s
+/// #### [Model]s
 ///
-/// Repository code, note how there is only data read and update logic here.
+/// Model code, note how there is only data read and update logic here.
 ///
 /// ```dart
 /// /// Counter Data.
-/// final class CounterRepository extends Repository {
+/// final class CounterModel extends Model {
 ///   int _count = 0;
 ///
 ///   /// Internal count.
@@ -47,27 +47,27 @@
 /// ```
 ///
 ///
-/// #### [Service]s
+/// #### [ViewModel]s
 ///
-/// Next, the Service code — i.e. all the details and controls to connect the UI and the data.
+/// Next, the ViewModel code — i.e. all the details and controls to connect the UI and the data.
 ///
-/// Notice how the Service receives its [Repository] through the constructor — this makes it
-/// straightforward to use multiple repositories, and keeps things easy to test.
+/// Notice how the ViewModel receives its [Model] through the constructor — this makes it
+/// straightforward to use multiple models, and keeps things easy to test.
 ///
 /// ```dart
 /// /// Counter Business Logic.
-/// final class CounterService extends Service {
-///   final CounterRepository _counterRepo;
+/// final class CounterViewModel extends ViewModel {
+///   final CounterModel _counterModel;
 ///
 ///   /// History of operations on counter.
 ///   final List<String> actionHistory = <String>[];
 ///
-///   /// Creates a [CounterService] operating on the given [CounterRepository].
-///   CounterService({required CounterRepository counterRepository})
-///     : _counterRepo = counterRepository;
+///   /// Creates a [CounterViewModel] operating on the given [CounterModel].
+///   CounterViewModel({required CounterModel counterModel})
+///     : _counterModel = counterModel;
 ///
 ///   /// Get count.
-///   int get count => _counterRepo.count;
+///   int get count => _counterModel.count;
 ///
 ///   set count(int _) {
 ///     throw UnsupportedError('setter for count not supported, property is read-only.');
@@ -75,55 +75,55 @@
 ///
 ///   /// Increment count by 1.
 ///   void increment() {
-///     int previousCount = _counterRepo.count;
+///     int previousCount = _counterModel.count;
 ///
-///     _counterRepo.increment();
-///     actionHistory.add('Incremented from $previousCount to ${_counterRepo.count}');
+///     _counterModel.increment();
+///     actionHistory.add('Incremented from $previousCount to ${_counterModel.count}');
 ///
 ///     notifyListeners();
 ///   }
 ///
 ///   /// Decrement count by 1.
 ///   void decrement() {
-///     int previousCount = _counterRepo.count;
+///     int previousCount = _counterModel.count;
 ///
-///     _counterRepo.decrement();
-///     actionHistory.add('Decremented from $previousCount to ${_counterRepo.count}');
+///     _counterModel.decrement();
+///     actionHistory.add('Decremented from $previousCount to ${_counterModel.count}');
 ///
 ///     notifyListeners();
 ///   }
 ///
 ///   /// Double count.
 ///   void double() {
-///     int previousCount = _counterRepo.count;
+///     int previousCount = _counterModel.count;
 ///
-///     _counterRepo.double();
-///     actionHistory.add('Doubled from $previousCount to ${_counterRepo.count}');
+///     _counterModel.double();
+///     actionHistory.add('Doubled from $previousCount to ${_counterModel.count}');
 ///
 ///     notifyListeners();
 ///   }
 ///
 ///   /// Half count.
 ///   void half() {
-///     int previousCount = _counterRepo.count;
+///     int previousCount = _counterModel.count;
 ///
-///     _counterRepo.half();
-///     actionHistory.add('Halved from $previousCount to ${_counterRepo.count}');
+///     _counterModel.half();
+///     actionHistory.add('Halved from $previousCount to ${_counterModel.count}');
 ///
 ///     notifyListeners();
 ///   }
 /// }
 /// ```
 ///
-/// ### [Fragment]s (i.e. A Fragment of view.)
+/// ### [Fragment]s (i.e. A Fragment of the View.)
 ///
-/// UI view for this 'fragment of UI.'
+/// UI fragment for this piece of the interface.
 ///
 /// ```dart
 /// /// Counter View
-/// final class CounterFragment extends Fragment<CounterService> {
+/// final class CounterFragment extends Fragment<CounterViewModel> {
 ///   @override
-///   Widget buildFragment(BuildContext context, CounterService service, Widget? child) {
+///   Widget buildFragment(BuildContext context, CounterViewModel viewModel, Widget? child) {
 ///     return Row(
 ///       mainAxisAlignment: MainAxisAlignment.spaceBetween,
 ///       children: [
@@ -140,14 +140,14 @@
 ///                     Padding(
 ///                       padding: const EdgeInsets.all(8.0),
 ///                       child: Button(
-///                         onPressed: service.increment,
+///                         onPressed: viewModel.increment,
 ///                         child: Text('+1', style: FluentTheme.of(context).typography.subtitle),
 ///                       ),
 ///                     ),
 ///                     Padding(
 ///                       padding: const EdgeInsets.all(8.0),
 ///                       child: Button(
-///                         onPressed: service.double,
+///                         onPressed: viewModel.double,
 ///                         child: Text('×2', style: FluentTheme.of(context).typography.subtitle),
 ///                       ),
 ///                     ),
@@ -156,7 +156,7 @@
 ///                 Padding(
 ///                   padding: const EdgeInsets.all(9.0),
 ///                   child: Text(
-///                     '${service.count}',
+///                     '${viewModel.count}',
 ///                     style: FluentTheme.of(context).typography.titleLarge,
 ///                   ),
 ///                 ),
@@ -166,14 +166,14 @@
 ///                     Padding(
 ///                       padding: const EdgeInsets.all(8.0),
 ///                       child: Button(
-///                         onPressed: service.decrement,
+///                         onPressed: viewModel.decrement,
 ///                         child: Text('-1', style: FluentTheme.of(context).typography.subtitle),
 ///                       ),
 ///                     ),
 ///                     Padding(
 ///                       padding: const EdgeInsets.all(8.0),
 ///                       child: Button(
-///                         onPressed: service.half,
+///                         onPressed: viewModel.half,
 ///                         child: Text('÷2', style: FluentTheme.of(context).typography.subtitle),
 ///                       ),
 ///                     ),
@@ -198,11 +198,11 @@
 ///                 ),
 ///                 Expanded(
 ///                   child: ListView.builder(
-///                     itemCount: service.actionHistory.length,
+///                     itemCount: viewModel.actionHistory.length,
 ///                     itemBuilder: (context, index) => IntrinsicWidth(
 ///                       child: ListTile(
 ///                         title: Text('Action #${index + 1}'),
-///                         subtitle: Text(service.actionHistory[index]),
+///                         subtitle: Text(viewModel.actionHistory[index]),
 ///                       ),
 ///                     ),
 ///                   ),
@@ -217,15 +217,15 @@
 /// }
 /// ```
 ///
-/// #### UtilContainer
+/// #### Connector
 ///
-/// Using the [UtilContainer] is easy, just insert the below into your widget tree.
+/// Using the [Connector] is easy, just insert the below into your widget tree.
 ///
 /// ```dart
-/// UtilContainer<CounterFragment, CounterService>(
+/// Connector<CounterFragment, CounterViewModel>(
 ///       fragment: CounterFragment(),
-///       service: CounterService(
-///         counterRepository: CounterRepository(),
+///       viewModel: CounterViewModel(
+///         counterModel: CounterModel(),
 ///       ),
 ///     );
 /// ```
@@ -234,8 +234,8 @@ library;
 
 import 'package:flutter/widgets.dart';
 
-part 'blueprint/container.dart';
+part 'blueprint/connector.dart';
 
-part 'blueprint/repository.dart';
-part 'blueprint/service.dart';
+part 'blueprint/model.dart';
+part 'blueprint/view_model.dart';
 part 'blueprint/fragment.dart';
